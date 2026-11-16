@@ -61,6 +61,7 @@ class AmyloidSimulation:
             self.current_step = step
 
             # NOTE: make sure to set initial timestep depending on method being used, referring to Von Neumann Stability Analysis
+            # NOTE: also take note of boundary conditions (some parts inside the brain are no flux as well (CSF portions))
 
             # explicit euler: simply subsitute forward time difference and central difference into fisher-kolmogrov to get
             # the system, and then solve.

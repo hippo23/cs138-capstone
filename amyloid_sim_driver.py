@@ -73,7 +73,9 @@ def flood_simulation_driver(args):
     tissue_probs = np.stack([gm, wm, csf], axis=-1)
     tissue_max = np.argmax(tissue_probs, axis=-1) + 1
 
-    tissue = np.zeros_like(mask)    
+    mask = mask or (tissue_max == 3)
+
+    tissue = np.zeros(mask.shape, dtype=np.uint8)    
     tissue = tissue + tissue_max
     tissue[~mask] = 0
 
