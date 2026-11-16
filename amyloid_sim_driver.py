@@ -2,7 +2,9 @@ import argparse
 import os
 import sys
 import time
+import nibabel as nib
 import numpy as np
+from typing import cast
 from amyloid_sim_class import AmyloidSimulation
 
 np.random.seed(24) 
@@ -49,10 +51,10 @@ def amyloid_simulation_driver(args):
     print(f"Loading mask from: {args.mask_path}")
 
     try:
-        mask_img = nib.load(args.mask_path)
-        gm_img   = nib.load(args.gm_path)
-        wm_img   = nib.load(args.wm_path)
-        csf_img  = nib.load(args.csf_path) 
+        mask_img = cast(nib.Nifti1Image, nib.load(args.mask_path))
+        gm_img   = cast(nib.Nifti1Image, nib.load(args.gm_path))
+        wm_img   = cast(nib.Nifti1Image, nib.load(args.wm_path))
+        csf_img  = cast(nib.Nifti1Image, nib.load(args.csf_path))
 
     except FileNotFoundError:
         sys.exit(1)
