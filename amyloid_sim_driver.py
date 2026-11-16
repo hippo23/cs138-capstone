@@ -63,6 +63,8 @@ def flood_simulation_driver(args):
         traceback.print_exc()
         sys.exit(1)
 
+    # using the probability files and the mask (which essentially mirrors the anatomy)
+    # we decide what is the most probably tissue category at each "cell" in the brain
     mask = mask_img.get_fdata() > 0
     gm = gm_img.get_fdata()
     wm = wm_img.get_fdata()
@@ -78,6 +80,7 @@ def flood_simulation_driver(args):
     # Initialize Simulation
     print("Initializing simulation...")
     try:
+        # TODO
         sim = AmyloidSimulation(
             ...
         )
@@ -92,6 +95,7 @@ def flood_simulation_driver(args):
     print(f"\n--- Running Simulation for {args.steps} steps ---")
     start_time = time.time()
     try:
+        # TODO
         results, time_steps = sim.run_simulation(
             num_steps=args.steps,
             output_freq=args.output_freq
@@ -117,6 +121,7 @@ def flood_simulation_driver(args):
         save_anim = args.output_path is not None
         save_frame = save_anim and args.save_last_frame # Only save frame if anim is saved
 
+        # TODO
         _ = sim.visualize_results(
             ...
         )
@@ -137,22 +142,19 @@ if __name__ == "__main__":
 
     # Input/Output Arguments
     io_group = parser.add_argument_group('Input/Output')
-    io_group.add_argument("--anatomy_path", "--anatomy-path", dest="anatomy_path", type=str, default=None,
-                      help="todo")
     io_group.add_argument("--wm_path", "--wm-path", dest="wm_path", type=str, default=None,
-                      help="todo")
+                      help="Path to file determining white matter probability.")
     io_group.add_argument("--gm_path", "--gm-path", dest="gm_path", type=str, default=None,
-                      help="todo")
+                      help="Path to file determining gray matter probability.")
     io_group.add_argument("--csf_path", "--csf-path", dest="csf_path", type=str, default=None,
-                      help="todo")
+                      help="Path to file determining cerebrospinal fluid probability.")
     io_group.add_argument("--mask_path", "--mask-path", dest="mask_path", type=str, default=None,
-                      help="todo")
+                      help="Path to file for the anatomy of the brain (all cells inside this mask are considered a valid simulation cell).")
     io_group.add_argument("-o", "--output-path", type=str, default=None, # Default None -> don't save animation
-                        help="todo")
+                        help="Where to save the final model (mask with amyloid concentration).")
 
     # Simulation Run Arguments
     sim_run_group = parser.add_argument_group('Simulation Run Control')
-    sim_run_group.add_argument("--steps", type=int, default=1000, help="Number of simulation steps.")
     sim_run_group.add_argument("--output-freq", type=int, default=50, help="Frequency (steps) for saving results for animation.")
     sim_run_group.add_argument("--target-time", type=float, default=3600.0, help="Target simulation time (seconds) for adaptive timestep stop.")
 
