@@ -45,7 +45,7 @@ class AmyloidSimulation:
         ...
 
     # TODO
-    def crank_nicolson():
+    def implicit_euler():
         ...
 
     # TODO
@@ -66,15 +66,16 @@ class AmyloidSimulation:
 
             # explicit euler: simply subsitute forward time difference and central difference into fisher-kolmogrov to get
             # the system, and then solve.
+            self.explicit_euler()
 
             # runge-kutta: again, advance in time using the system. This becomes fourth-order accurate in time, however,
             # you might opt to use a fourth-order accurate approximation to the spatial derivatives as well for it to make sense.
+            self.runge_kutta()
 
-            # implicit / semi-implicit (crank-nicolson): 
-            # IMEX / semi-implicit to reduce computational cost to not have to solve
-            # nonlinear algebraic systems
+            # implicit euler: 
             # still, cannot be solved using LU due to brain mesh size. Need iterative methods
             # i.e. Gauss-Siedel, Jacobi
+            self.implicit_euler()
 
             if step % output_freq == 0:
                 ...
