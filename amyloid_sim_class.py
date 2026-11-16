@@ -1,22 +1,23 @@
 import numpy as np
+import time
 
 class AmyloidSimulation:
     def __init__(self, tissue_model, valid_mask, wm_ext = 1.5, wm_axn = 3.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.4, target_time=3600.0):
 
-    """
-    Parameters:
-    -----------
-    tissue_model : numpy.ndarray : model of brain, with each cell categorized into gray matter, white matter, or CSF
-    valid_mask : numpy.ndarray : Mask indicating valid areas for simulation 
-    stability_factor : float : Factor to reduce timestep (0-1) for stability control 
-    target_time : float : Target simulation time (seconds)
-    wm_ext : float : Extracellular diffusion for white matter
-    wm_axn : float : Axonal transportation for white matter
-    wm_alpha : float : Growth rate for white matter
-    gm_ext : float : Extracellular diffusion for gray matter
-    gm_axn : float : Axonal transportation for gray matter
-    gm_alpha : float : Growth rate for gray matter
-    """
+        """
+        Parameters:
+        -----------
+        tissue_model : numpy.ndarray : model of brain, with each cell categorized into gray matter, white matter, or CSF
+        valid_mask : numpy.ndarray : Mask indicating valid areas for simulation 
+        stability_factor : float : Factor to reduce timestep (0-1) for stability control 
+        target_time : float : Target simulation time (seconds)
+        wm_ext : float : Extracellular diffusion for white matter
+        wm_axn : float : Axonal transportation for white matter
+        wm_alpha : float : Growth rate for white matter
+        gm_ext : float : Extracellular diffusion for gray matter
+        gm_axn : float : Axonal transportation for gray matter
+        gm_alpha : float : Growth rate for gray matter
+        """
 
         self.tissue_model = tissue_model.astype(np.int8)
         self.valid_mask = valid_mask.astype(bool)

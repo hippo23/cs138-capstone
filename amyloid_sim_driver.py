@@ -7,7 +7,7 @@ from amyloid_sim_class import AmyloidSimulation
 
 np.random.seed(24) 
 
-def flood_simulation_driver(args):
+def amyloid_simulation_driver(args):
     """
     Loads data, sets up, runs, and visualizes the amyloid simulation
     based on command-line arguments.
