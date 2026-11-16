@@ -75,7 +75,9 @@ def amyloid_simulation_driver(args):
     tissue_probs = np.stack([gm, wm, csf], axis=-1)
     tissue_max = np.argmax(tissue_probs, axis=-1) + 1
 
-    mask = mask or (tissue_max == 3)
+    probs_mask = np.any(tissue_probs, axis=-1)
+    csf_mask = tissue_max == 3
+    mask = mask or csf_mask or probs_mask
 
     tissue = np.zeros(mask.shape, dtype=np.uint8)    
     tissue = tissue + tissue_max
