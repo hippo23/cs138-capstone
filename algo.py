@@ -92,10 +92,10 @@ def backwards_euler(c, dt, D, alpha, L, matsolver, tol=1e-8, l_tol=1e-10, max_ne
             #Infinity Norm Check
             break
 
-    return g, newton_iterations, total_lin_iter
+    return g, total_lin_iter
 
 
-def lu_solver(J, b):
+def lu_solver(J, b): 
     n = J.shape[0]
 
     #initialize nxn matrix    
@@ -235,13 +235,15 @@ def simulate(N, D, alpha, c0, T, dt, scheme, matsolver, Tol):
             case "RK4":
                 c = rk4(c, dt, D, alpha, L)
             case "Backwards_Euler":
-                raise backwards_euler("Scheme not implemented")
+                c, lin_iter = backwards_euler(c, dt, D, alpha, L, "Gauss_Seidel")
+                linear_iterations = lin_iter
             case _:
                 raise ValueError("Invalid iteration scheme")
 
         elapsed = time.perf_counter() - start
         step += 1
         current_time += dt
+
 
         dataset.append({
             "step": step,
@@ -268,7 +270,7 @@ if __name__ == "__main__":
         c0=0.1,
         T=10,
         dt=0.2,
-        scheme="Forward_Euler",
+        scheme="Backwards_Euler",
         matsolver="LU",
         Tol=1e-10
     )
