@@ -1,16 +1,25 @@
 import numpy as np
+import nibabel as nib
 import time
+from compute_spread_step import compute_explicit_ftcs_step
+from nilearn.plotting import view_img
+
+np.random.seed(24) 
 
 class AmyloidSimulation:
-    def __init__(self, tissue_model, valid_mask, wm_ext = 1.5, wm_axn = 3.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.4, target_time=3600.0):
+    def __init__(self, valid_mask, seed_mask, wm_mask, gm_mask, max_seed_value=0.1, min_seed_value=0.01, wm_ext = 1.5, wm_axn = 3.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.4, target_time=3600.0):
 
         """
         Parameters:
         -----------
-        tissue_model : numpy.ndarray : model of brain, with each cell categorized into gray matter, white matter, or CSF
         valid_mask : numpy.ndarray : Mask indicating valid areas for simulation 
+        seed_mask : numpy.ndarray : Mask indicating seeding region.
+        wm_mask : numpy.ndarray : Mask indicating all valid white matter.
+        gm_mask : numpy.ndarray : Mask indicating all valid gray matter.
         stability_factor : float : Factor to reduce timestep (0-1) for stability control 
         target_time : float : Target simulation time (seconds)
+        min_seed_value : float : minimum initial concentration within seeding region
+        max_seed_value : float : maximum initiial concentration within seeding region
         wm_ext : float : Extracellular diffusion for white matter
         wm_axn : float : Axonal transportation for white matter
         wm_alpha : float : Growth rate for white matter
@@ -19,9 +28,12 @@ class AmyloidSimulation:
         gm_alpha : float : Growth rate for gray matter
         """
 
-        self.tissue_model = tissue_model.astype(np.int8)
         self.valid_mask = valid_mask.astype(bool)
-        self.amyloid_model = np.zeros_like(valid_mask)
+        self.wm_mask = wm_mask
+        self.gm_mask = gm_mask
+
+        self.c = np.zeros(self.valid_mask.shape, dtype=np.float32)
+        self.c[seed_mask] = np.random.uniform(min_seed_value, max_seed_value, size=seed_mask.sum())
 
         self.wm_ext = float(wm_ext) # cm^2 / year
         self.wm_axn = float(wm_axn) # cm^2 / year
@@ -36,9 +48,17 @@ class AmyloidSimulation:
         self.stability_factor = float(stability_factor)
         self.target_time = float(target_time)
 
-    # TODO
-    def explicit_euler():
-        ...
+        self.dx = .1
+        self.dy = .1
+        self.dz = .1
+
+        # for our timestep
+        self.dt = self.stability_factor * 1 / (2 * max(self.wm_ext, self.gm_ext) * (1 / self.dx ** 2 + 1 / self.dy ** 2 + 1 / self.dz ** 2) + max(self.wm_alpha, self.gm_alpha))
+
+        self.current_step = 0
+
+    def explicit_ftcs(self):
+        compute_explicit_ftcs_step(self.c, self.valid_mask, self.wm_mask, self.gm_mask, self.wm_ext, self.wm_axn, self.wm_alpha, self.gm_ext, self.gm_axn, self.gm_alpha, self.dx, self.dy, self.dz, self.dt)
 
     # TODO
     def runge_kutta():
@@ -49,7 +69,7 @@ class AmyloidSimulation:
         ...
 
     # TODO
-    def run_simulation(self, num_steps, output_freq=10):
+    def run_simulation(self, num_steps, output_freq=100, method=0):
         results = []
         time_steps_list = []
         total_time = 0.0
@@ -61,42 +81,54 @@ class AmyloidSimulation:
         while True:
             self.current_step = step
 
-            # NOTE: make sure to set initial timestep depending on method being used, referring to Von Neumann Stability Analysis
-            # NOTE: also take note of boundary conditions (some parts inside the brain are no flux as well (CSF portions))
+            if method == 0:
+                self.explicit_ftcs()
+            elif method == 1:
+                self.runge_kutta()
+            else:
+                self.implicit_euler()
 
-            # explicit euler: simply subsitute forward time difference and central difference into fisher-kolmogrov to get
-            # the system, and then solve.
-            self.explicit_euler()
-
-            # runge-kutta: again, advance in time using the system. This becomes fourth-order accurate in time, however,
-            # you might opt to use a fourth-order accurate approximation to the spatial derivatives as well for it to make sense.
-            self.runge_kutta()
-
-            # implicit euler: 
-            # still, cannot be solved using LU due to brain mesh size. Need iterative methods
-            # i.e. Gauss-Siedel, Jacobi
-            self.implicit_euler()
+            current_dt = self.dt
+            total_time += current_dt
 
             if step % output_freq == 0:
-                ...
+                results.append(self.c.copy())
+                time_steps_list.append(total_time)
+
+                # compute maximum concentration
+                max_c = np.nanmax(self.c)
+
+                print(
+                    f"Step {step}"
+                    f"Sim Time: {total_time + initial_sim_time_offset:.7f} years (+{current_dt:.7e} years), "
+                    f"Max Concentration: {max_c:.10f}"
+                )
         
             if total_time >= self.target_time:
-                print(f" Simulation time reached target time {self.target_time}. Stopping.")
+                print(f" Simulation time reached target time {self.target_time} years. Stopping.")
                 # Ensure the very last state is saved if stopping due to time
                 if step % output_freq != 0:
-                    results.append(self.h.copy())
+                    results.append(self.c.copy())
                     time_steps_list.append(total_time + initial_sim_time_offset)
                 break
 
             step += 1
 
         end_run_time = time.time()
-        print(f"\nSimulation finished {step+1} steps in {end_run_time - start_run_time:.2f} seconds (wall clock).")
-
+        print(f"\nSimulation finished in {end_run_time - start_run_time:.2f} seconds (wall clock).")
         
-        # TODO: return the results (could return results at each freq to show animation)
         return results, time_steps_list
 
-    # TODO
-    def visualize_results(self, results, time_steps, output_path=None, show_animation=True, save_last_frame=True):
-        ...
+    def visualize_results(self, results, affine):
+        frames = np.stack(results, axis=-1)
+        animation = nib.Nifti1Image(frames.astype(np.float32), affine)
+
+        html_view = view_img(
+            animation,
+            cmap='hot',
+            tite='Amyloid Spread Over Time',
+            threshold='auto',
+            vmin=0,
+            vmax=1
+        )
+

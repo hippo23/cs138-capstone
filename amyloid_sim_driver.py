@@ -45,16 +45,23 @@ def amyloid_simulation_driver(args):
     print(f"Loading cerebrospinal fluid from: {args.csf_path}")
 
     if not args.mask_path:
-        print("ERROR: mask argument is required for a standard simulation.")
+        print("ERROR: mask_path argument is required for a standard simulation.")
         sys.exit(1)
 
     print(f"Loading mask from: {args.mask_path}")
+
+    if not args.seed_path:
+        print("ERROR: seed_path argument is required for a standard simulation.")
+        sys.exit(1)
+
+    print(f"Loading mask from: {args.seed_path}")
 
     try:
         mask_img = cast(nib.Nifti1Image, nib.load(args.mask_path))
         gm_img   = cast(nib.Nifti1Image, nib.load(args.gm_path))
         wm_img   = cast(nib.Nifti1Image, nib.load(args.wm_path))
         csf_img  = cast(nib.Nifti1Image, nib.load(args.csf_path))
+        seed_img  = cast(nib.Nifti1Image, nib.load(args.seed_path))
 
     except FileNotFoundError:
         sys.exit(1)
@@ -71,37 +78,36 @@ def amyloid_simulation_driver(args):
     gm = gm_img.get_fdata()
     wm = wm_img.get_fdata()
     csf = csf_img.get_fdata()
+    seed = seed_img.get_fdata() > 0
 
-    tissue_probs = np.stack([gm, wm, csf], axis=-1)
+    tissue_probs = np.stack([wm, gm, csf], axis=-1)
     tissue_max = np.argmax(tissue_probs, axis=-1) + 1
 
-    probs_mask = np.any(tissue_probs, axis=-1)
-    csf_mask = tissue_max == 3
-    mask = mask or csf_mask or probs_mask
-
-    tissue = np.zeros(mask.shape, dtype=np.uint8)    
-    tissue = tissue + tissue_max
-    tissue[~mask] = 0
+    seed_mask = mask & seed
+    wm_mask = mask & (tissue_max == 1)
+    gm_mask = mask & (tissue_max == 2)
+    valid_mask = (tissue_max != 3) & mask
 
     # Initialize Simulation
     print("Initializing simulation...")
     try:
-        # TODO
         sim = AmyloidSimulation(
-            ...
+            valid_mask=valid_mask,
+            seed_mask=seed_mask,
+            wm_mask=wm_mask,
+            gm_mask=gm_mask
         )
     except Exception as e:
         print(f"ERROR: Failed to initialize AmyloidSimulation. {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
-        )
+        
 
     # Run Simulation 
     print(f"\n--- Running Simulation for {args.steps} steps ---")
     start_time = time.time()
     try:
-        # TODO
         results, time_steps = sim.run_simulation(
             num_steps=args.steps,
             output_freq=args.output_freq
@@ -129,7 +135,7 @@ def amyloid_simulation_driver(args):
 
         # TODO
         _ = sim.visualize_results(
-            ...
+            results=results, affine=mask_img.affine
         )
 
     except ImportError as e:
@@ -156,13 +162,17 @@ if __name__ == "__main__":
                       help="Path to file determining cerebrospinal fluid probability.")
     io_group.add_argument("--mask_path", "--mask-path", dest="mask_path", type=str, default=None,
                       help="Path to file for the anatomy of the brain (all cells inside this mask are considered a valid simulation cell).")
+    io_group.add_argument("--seed_path", "--seed-path", dest="seed_path", type=str, default=None,
+                      help="Initial seeding region for misfolded protein.")
     io_group.add_argument("-o", "--output-path", type=str, default=None, # Default None -> don't save animation
                         help="Where to save the final model (mask with amyloid concentration).")
 
     # Simulation Run Arguments
     sim_run_group = parser.add_argument_group('Simulation Run Control')
-    sim_run_group.add_argument("--output-freq", type=int, default=50, help="Frequency (steps) for saving results for animation.")
+    sim_run_group.add_argument("--output-freq", type=int, default=100, help="Frequency (steps) for saving results for animation.")
     sim_run_group.add_argument("--target-time", type=float, default=3600.0, help="Target simulation time (seconds) for adaptive timestep stop.")
+    sim_run_group.add_argument("--min-seed-value", type=float, default=0.05, help="Maximum possible initial concentration of amyloid inside the seeding region.")
+    sim_run_group.add_argument("--max-seed-value", type=float, default=0.001, help="Minimum possible initial concentration of amyloid inside seeding region.")
 
     # Parse Arguments 
     args = parser.parse_args()
