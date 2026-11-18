@@ -183,6 +183,7 @@ def gauss_seidel_solver(J, b, tol, max_iter):
     return x, max_iter
 
 
+
 def fsolver(g, c, dt, D, alpha, L):
     return g - c + (dt*D*(L@g)) - (dt*alpha*g*(1.0-g))
 
