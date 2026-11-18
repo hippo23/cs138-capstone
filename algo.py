@@ -1,5 +1,4 @@
 """
-
 N - number of grid points
 D - diffusivity
 α - conversion rate from folder to misfolder
@@ -9,9 +8,8 @@ dt - time step
 scheme - ...
 matsolver - ... (LU, jacobi, gauss-seidel)
 Tol - convergence tolerance
-
-
 """
+from kind import Scheme, MatrixSolver
 import numpy as np
 import time
 
@@ -67,7 +65,7 @@ def rk4(c, dt, D, alpha, L):
     return c + dt * (k1 + 2*k2 + 2*k3 + k4) / 6
 
 
-def backwards_euler(c, dt, D, alpha, L, matsolver, tol=1e-8, l_tol=1e-10, max_newton_iter=50, max_iter=1000):
+def backwards_euler(c, dt, D, alpha, L, matsolver: MatrixSolver, tol=1e-8, l_tol=1e-10, max_newton_iter=50, max_iter=1000):
     g = c.copy()
     total_lin_iter = 0 #total linear iterations
     newton_lin_iter = 0
@@ -77,11 +75,11 @@ def backwards_euler(c, dt, D, alpha, L, matsolver, tol=1e-8, l_tol=1e-10, max_ne
         J = jacobian(g, dt, D, alpha, L)
 
         match matsolver:
-            case "LU":
+            case MatrixSolver.LU:
                 delta, lin_iter = lu_solver(J, -F)
-            case "Jacobi":
+            case MatrixSolver.JACOBI:
                 delta, lin_iter = jacobi_solver(J, -F, tol=l_tol, max_iter=max_iter)
-            case "Gauss_Seidel":
+            case MatrixSolver.GAUSS_SEIDEL:
                 delta, lin_iter = gauss_seidel_solver(J, -F, tol=l_tol, max_iter=max_iter)
             case _:
                 raise ValueError("Maglagay kayo ng matsolver")
@@ -185,7 +183,6 @@ def gauss_seidel_solver(J, b, tol, max_iter):
     return x, max_iter
 
 
-
 def fsolver(g, c, dt, D, alpha, L):
     return g - c + (dt*D*(L@g)) - (dt*alpha*g*(1.0-g))
 
@@ -213,7 +210,7 @@ def front_position(c, h, threshold=0.5):
     return float((i + frac) * h)
 
 
-def simulate(N, D, alpha, c0, T, dt, scheme, matsolver, Tol):
+def simulate(N, D, alpha, c0, T, dt, scheme: Scheme, matsolver: MatrixSolver, Tol):
     h, L = setup(N)
     max_eigenvalue = power_method(L)
     max_timestop = 2.0 / (D * max_eigenvalue)
@@ -232,12 +229,12 @@ def simulate(N, D, alpha, c0, T, dt, scheme, matsolver, Tol):
         linear_iterations = 0
         
         match scheme:
-            case "Forward_Euler":
+            case Scheme.FORWARD_EULER:
                 c = forward_euler(c, dt, D, alpha, L)
-            case "RK4":
+            case Scheme.RK4:
                 c = rk4(c, dt, D, alpha, L)
-            case "Backwards_Euler":
-                c, newton_lin_iter, lin_iter = backwards_euler(c, dt, D, alpha, L, "Gauss_Seidel")
+            case Scheme.BACKWARDS_EULER:
+                c, newton_lin_iter, lin_iter = backwards_euler(c, dt, D, alpha, L, matsolver)
                 linear_iterations = lin_iter
                 newton_iterations = newton_lin_iter
             case _:
@@ -246,7 +243,6 @@ def simulate(N, D, alpha, c0, T, dt, scheme, matsolver, Tol):
         elapsed = time.perf_counter() - start
         step += 1
         current_time += dt
-
 
         dataset.append({
             "step": step,
@@ -273,15 +269,15 @@ if __name__ == "__main__":
         c0=0.1,
         T=10,
         dt=0.2,
-        scheme="Backwards_Euler",
-        matsolver="LU",
+        scheme=Scheme.FORWARD_EULER,
+        matsolver=MatrixSolver.LU,
         Tol=1e-10
     )
 
     print("Dataset result:")
-    for data in results:
-        print(data)
+    print(results[-1])
+    # for data in results:
+    #     print(data)
 
     print("Final c:")
     print(final_c)
-
