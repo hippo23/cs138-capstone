@@ -70,6 +70,7 @@ def rk4(c, dt, D, alpha, L):
 def backwards_euler(c, dt, D, alpha, L, matsolver, tol=1e-8, l_tol=1e-10, max_newton_iter=50, max_iter=1000):
     g = c.copy()
     total_lin_iter = 0 #total linear iterations
+    newton_lin_iter = 0
 
     for newton_iterations in range(max_newton_iter):
         F = fsolver(g, c, dt, D, alpha, L)
@@ -86,13 +87,14 @@ def backwards_euler(c, dt, D, alpha, L, matsolver, tol=1e-8, l_tol=1e-10, max_ne
                 raise ValueError("Maglagay kayo ng matsolver")
 
         total_lin_iter += lin_iter            
+        newton_lin_iter += 1
         g = g + delta #numpy works!
 
         if np.max(np.abs(delta)) < tol:
             #Infinity Norm Check
             break
 
-    return g, total_lin_iter
+    return g, newton_lin_iter, total_lin_iter
 
 
 def lu_solver(J, b): 
@@ -235,8 +237,9 @@ def simulate(N, D, alpha, c0, T, dt, scheme, matsolver, Tol):
             case "RK4":
                 c = rk4(c, dt, D, alpha, L)
             case "Backwards_Euler":
-                c, lin_iter = backwards_euler(c, dt, D, alpha, L, "Gauss_Seidel")
+                c, newton_lin_iter, lin_iter = backwards_euler(c, dt, D, alpha, L, "Gauss_Seidel")
                 linear_iterations = lin_iter
+                newton_iterations = newton_lin_iter
             case _:
                 raise ValueError("Invalid iteration scheme")
 
