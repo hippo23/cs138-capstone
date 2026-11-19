@@ -1,13 +1,15 @@
 import numpy as np
 import nibabel as nib
+import napari
 import time
 from compute_spread_step import compute_explicit_ftcs_step
 from nilearn.plotting import view_img
+from scipy.ndimage import gaussian_filter
 
 np.random.seed(24) 
 
 class AmyloidSimulation:
-    def __init__(self, valid_mask, seed_mask, wm_mask, gm_mask, max_seed_value=0.1, min_seed_value=0.01, wm_ext = 1.5, wm_axn = 3.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.4, target_time=3600.0):
+    def __init__(self, valid_mask, fiber, seed_mask, wm_mask, gm_mask, max_seed_value=0.05, min_seed_value=0.001, wm_ext = 1.5, wm_axn = 3.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.4, target_time=1.0):
 
         """
         Parameters:
@@ -29,11 +31,14 @@ class AmyloidSimulation:
         """
 
         self.valid_mask = valid_mask.astype(bool)
+        self.fiber = fiber
         self.wm_mask = wm_mask
         self.gm_mask = gm_mask
 
         self.c = np.zeros(self.valid_mask.shape, dtype=np.float32)
-        self.c[seed_mask] = np.random.uniform(min_seed_value, max_seed_value, size=seed_mask.sum())
+        noise = np.random.uniform(min_seed_value, max_seed_value, size=self.valid_mask.shape)
+        noise = gaussian_filter(noise, sigma=2.0)
+        self.c[seed_mask] = noise[seed_mask]
 
         self.wm_ext = float(wm_ext) # cm^2 / year
         self.wm_axn = float(wm_axn) # cm^2 / year
@@ -58,7 +63,12 @@ class AmyloidSimulation:
         self.current_step = 0
 
     def explicit_ftcs(self):
-        compute_explicit_ftcs_step(self.c, self.valid_mask, self.wm_mask, self.gm_mask, self.wm_ext, self.wm_axn, self.wm_alpha, self.gm_ext, self.gm_axn, self.gm_alpha, self.dx, self.dy, self.dz, self.dt)
+        self.c = compute_explicit_ftcs_step(
+                                            self.c, self.valid_mask, self.fiber, self.wm_mask, self.gm_mask,
+                                            self.wm_ext, self.wm_axn, self.wm_alpha, self.gm_ext,
+                                            self.gm_axn, self.gm_alpha, self.dx, self.dy, self.dz,
+                                            self.dt
+                                        )
 
     # TODO
     def runge_kutta():
@@ -69,7 +79,7 @@ class AmyloidSimulation:
         ...
 
     # TODO
-    def run_simulation(self, num_steps, output_freq=100, method=0):
+    def run_simulation(self, output_freq=100, method=0):
         results = []
         time_steps_list = []
         total_time = 0.0
@@ -99,8 +109,8 @@ class AmyloidSimulation:
                 max_c = np.nanmax(self.c)
 
                 print(
-                    f"Step {step}"
-                    f"Sim Time: {total_time + initial_sim_time_offset:.7f} years (+{current_dt:.7e} years), "
+                    f"Step {step} ", 
+                    f"Sim Time: {total_time + initial_sim_time_offset:.7f} years / {self.target_time} years (+{current_dt:.7e} years), "
                     f"Max Concentration: {max_c:.10f}"
                 )
         
@@ -119,16 +129,12 @@ class AmyloidSimulation:
         
         return results, time_steps_list
 
-    def visualize_results(self, results, affine):
-        frames = np.stack(results, axis=-1)
-        animation = nib.Nifti1Image(frames.astype(np.float32), affine)
+    def visualize_results(self, results, affine, save_final_frame=False, output_path=None):
+        final_frame = np.asarray(results[-1], dtype=np.float32)
 
-        html_view = view_img(
-            animation,
-            cmap='hot',
-            tite='Amyloid Spread Over Time',
-            threshold='auto',
-            vmin=0,
-            vmax=1
-        )
+        if save_final_frame and output_path:
+            img = nib.Nifti1Image(final_frame, affine)
+            nib.save(img, output_path)
 
+            print(f"Saved final frame to {output_path}")
+            return output_path

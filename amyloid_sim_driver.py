@@ -20,12 +20,6 @@ def amyloid_simulation_driver(args):
 
     print("--- Starting Amyloid Simulation Driver ---")
 
-    if not args.anatomy_path:
-        print("ERROR: anatomy_path argument is required for a standard simulation.")
-        sys.exit(1)
-
-    print(f"Loading anatomy from: {args.dem_path}")
-
     if not args.wm_path:
         print("ERROR: wm_path argument is required for a standard simulation.")
         sys.exit(1)
@@ -50,6 +44,12 @@ def amyloid_simulation_driver(args):
 
     print(f"Loading mask from: {args.mask_path}")
 
+    if not args.fiber_path:
+        print("ERROR: fiber_path argument is required for a standard simulation.")
+        sys.exit(1)
+
+    print(f"Loading mask from: {args.fiber_path}")
+
     if not args.seed_path:
         print("ERROR: seed_path argument is required for a standard simulation.")
         sys.exit(1)
@@ -61,6 +61,7 @@ def amyloid_simulation_driver(args):
         gm_img   = cast(nib.Nifti1Image, nib.load(args.gm_path))
         wm_img   = cast(nib.Nifti1Image, nib.load(args.wm_path))
         csf_img  = cast(nib.Nifti1Image, nib.load(args.csf_path))
+        fiber_img  = cast(nib.Nifti1Image, nib.load(args.fiber_path))
         seed_img  = cast(nib.Nifti1Image, nib.load(args.seed_path))
 
     except FileNotFoundError:
@@ -78,24 +79,30 @@ def amyloid_simulation_driver(args):
     gm = gm_img.get_fdata()
     wm = wm_img.get_fdata()
     csf = csf_img.get_fdata()
+    fiber = fiber_img.get_fdata()
+    fiber_mask = np.linalg.norm(fiber, axis=-1) > 1e-6
     seed = seed_img.get_fdata() > 0
 
     tissue_probs = np.stack([wm, gm, csf], axis=-1)
     tissue_max = np.argmax(tissue_probs, axis=-1) + 1
 
-    seed_mask = mask & seed
-    wm_mask = mask & (tissue_max == 1)
-    gm_mask = mask & (tissue_max == 2)
-    valid_mask = (tissue_max != 3) & mask
+    valid_mask = (tissue_max != 3) & mask & fiber_mask
+    seed_mask = valid_mask & seed
+    wm_mask = valid_mask & (tissue_max == 1)
+    gm_mask = valid_mask & (tissue_max == 2)
 
     # Initialize Simulation
     print("Initializing simulation...")
     try:
         sim = AmyloidSimulation(
             valid_mask=valid_mask,
+            fiber=fiber,
             seed_mask=seed_mask,
             wm_mask=wm_mask,
-            gm_mask=gm_mask
+            gm_mask=gm_mask,
+            max_seed_value=args.max_seed_value,
+            min_seed_value=args.min_seed_value,
+            target_time=args.target_time
         )
     except Exception as e:
         print(f"ERROR: Failed to initialize AmyloidSimulation. {e}")
@@ -105,11 +112,10 @@ def amyloid_simulation_driver(args):
         
 
     # Run Simulation 
-    print(f"\n--- Running Simulation for {args.steps} steps ---")
+    print(f"\n--- Running Simulation for {args.target_time} years ---")
     start_time = time.time()
     try:
         results, time_steps = sim.run_simulation(
-            num_steps=args.steps,
             output_freq=args.output_freq
         )
     except Exception as e:
@@ -129,13 +135,8 @@ def amyloid_simulation_driver(args):
 
     print("\n--- Visualizing and Saving Results ---")
     try:
-        # Check if output path is specified for saving
-        save_anim = args.output_path is not None
-        save_frame = save_anim and args.save_last_frame # Only save frame if anim is saved
-
-        # TODO
         _ = sim.visualize_results(
-            results=results, affine=mask_img.affine
+            results=results, affine=mask_img.affine, save_final_frame=True, output_path=args.output_path
         )
 
     except ImportError as e:
@@ -162,6 +163,7 @@ if __name__ == "__main__":
                       help="Path to file determining cerebrospinal fluid probability.")
     io_group.add_argument("--mask_path", "--mask-path", dest="mask_path", type=str, default=None,
                       help="Path to file for the anatomy of the brain (all cells inside this mask are considered a valid simulation cell).")
+    io_group.add_argument("--fiber_path", "--fiber-path", dest="fiber_path", type=str, default=None)
     io_group.add_argument("--seed_path", "--seed-path", dest="seed_path", type=str, default=None,
                       help="Initial seeding region for misfolded protein.")
     io_group.add_argument("-o", "--output-path", type=str, default=None, # Default None -> don't save animation
@@ -170,7 +172,7 @@ if __name__ == "__main__":
     # Simulation Run Arguments
     sim_run_group = parser.add_argument_group('Simulation Run Control')
     sim_run_group.add_argument("--output-freq", type=int, default=100, help="Frequency (steps) for saving results for animation.")
-    sim_run_group.add_argument("--target-time", type=float, default=3600.0, help="Target simulation time (seconds) for adaptive timestep stop.")
+    sim_run_group.add_argument("--target-time", type=float, default=1, help="Target simulation time (years) for adaptive timestep stop.")
     sim_run_group.add_argument("--min-seed-value", type=float, default=0.05, help="Maximum possible initial concentration of amyloid inside the seeding region.")
     sim_run_group.add_argument("--max-seed-value", type=float, default=0.001, help="Minimum possible initial concentration of amyloid inside seeding region.")
 
