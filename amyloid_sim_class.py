@@ -5,11 +5,12 @@ import time
 from compute_spread_step import compute_explicit_ftcs_step
 from nilearn.plotting import view_img
 from scipy.ndimage import gaussian_filter
+from amyloid_helpers import harmonic_mean_8_corners
 
 np.random.seed(24) 
 
 class AmyloidSimulation:
-    def __init__(self, valid_mask, fiber, seed_mask, wm_mask, gm_mask, max_seed_value=0.05, min_seed_value=0.001, wm_ext = 1.5, wm_axn = 3.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.4, target_time=1.0):
+    def __init__(self, valid_mask, fiber, seed_mask, wm_mask, gm_mask, max_seed_value=0.05, min_seed_value=0.001, wm_ext = 1.5, wm_axn = 24.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.4, target_time=1.0):
 
         """
         Parameters:
@@ -57,18 +58,93 @@ class AmyloidSimulation:
         self.dy = .1
         self.dz = .1
 
-        # for our timestep
-        self.dt = self.stability_factor * 1 / (2 * max(self.wm_ext, self.gm_ext) * (1 / self.dx ** 2 + 1 / self.dy ** 2 + 1 / self.dz ** 2) + max(self.wm_alpha, self.gm_alpha))
+        # we pre-compute the diffusion matrix used in calculation, as this is a heavy computation step.
+        print("PRE-PROCESSING DIFFUSION MATRIX...")
+        ext_diff = np.zeros(self.c.shape, dtype=np.float64)
+        ext_diff[self.wm_mask] = self.wm_ext
+        ext_diff[self.gm_mask] = self.gm_ext
+        ext_diff[~self.valid_mask] = 0.0
 
+        dir_outer_prod = self.fiber[..., :, None] * self.fiber[..., None, :]
+        axonal_diff = np.zeros(self.c.shape + (3, 3), dtype=np.float64)
+        axonal_diff[self.wm_mask] = self.wm_axn * dir_outer_prod[self.wm_mask]
+        axonal_diff[self.gm_mask] = self.gm_axn * dir_outer_prod[self.gm_mask]
+
+        axonal_diff[~self.valid_mask] = 0.0
+        diffusion = ext_diff[..., None, None] * np.eye(3) + axonal_diff
+        diffusion_pad = np.pad(diffusion, pad_width=((1, 1), (1, 1), (1, 1), (0, 0), (0, 0)), mode="edge")
+
+        
+        self.diff_ppp = harmonic_mean_8_corners(
+            diffusion_pad[1:-1, 1:-1, 1:-1], diffusion_pad[1:-1, 1:-1, 2:],
+            diffusion_pad[1:-1, 2:, 1:-1], diffusion_pad[1:-1, 2:, 2:],
+            diffusion_pad[2:, 1:-1, 1:-1], diffusion_pad[2:, 1:-1, 2:],
+            diffusion_pad[2:, 2:, 1:-1], diffusion_pad[2:, 2:, 2:],
+        )
+        self.diff_mpp = harmonic_mean_8_corners(
+            diffusion_pad[:-2, 1:-1, 1:-1], diffusion_pad[:-2, 1:-1, 2:],
+            diffusion_pad[:-2, 2:, 1:-1], diffusion_pad[:-2, 2:, 2:],
+            diffusion_pad[1:-1, 1:-1, 1:-1], diffusion_pad[1:-1, 1:-1, 2:],
+            diffusion_pad[1:-1, 2:, 1:-1], diffusion_pad[1:-1, 2:, 2:],
+        )
+        self.diff_pmp = harmonic_mean_8_corners(
+            diffusion_pad[1:-1, :-2, 1:-1], diffusion_pad[1:-1, :-2, 2:],
+            diffusion_pad[1:-1, 1:-1, 1:-1], diffusion_pad[1:-1, 1:-1, 2:],
+            diffusion_pad[2:, :-2, 1:-1], diffusion_pad[2:, :-2, 2:],
+            diffusion_pad[2:, 1:-1, 1:-1], diffusion_pad[2:, 1:-1, 2:],
+        )
+        self.diff_ppm = harmonic_mean_8_corners(
+            diffusion_pad[1:-1, 1:-1, :-2], diffusion_pad[1:-1, 1:-1, 1:-1],
+            diffusion_pad[1:-1, 2:, :-2], diffusion_pad[1:-1, 2:, 1:-1],
+            diffusion_pad[2:, 1:-1, :-2], diffusion_pad[2:, 1:-1, 1:-1],
+            diffusion_pad[2:, 2:, :-2], diffusion_pad[2:, 2:, 1:-1],
+        )
+        self.diff_mmp = harmonic_mean_8_corners(
+            diffusion_pad[:-2, :-2, 1:-1], diffusion_pad[:-2, :-2, 2:],
+            diffusion_pad[:-2, 1:-1, 1:-1], diffusion_pad[:-2, 1:-1, 2:],
+            diffusion_pad[1:-1, :-2, 1:-1], diffusion_pad[1:-1, :-2, 2:],
+            diffusion_pad[1:-1, 1:-1, 1:-1], diffusion_pad[1:-1, 1:-1, 2:],
+        )
+        self.diff_mpm = harmonic_mean_8_corners(
+            diffusion_pad[:-2, 1:-1, :-2], diffusion_pad[:-2, 1:-1, 1:-1],
+            diffusion_pad[:-2, 2:, :-2], diffusion_pad[:-2, 2:, 1:-1],
+            diffusion_pad[1:-1, 1:-1, :-2], diffusion_pad[1:-1, 1:-1, 1:-1],
+            diffusion_pad[1:-1, 2:, :-2], diffusion_pad[1:-1, 2:, 1:-1],
+        )
+        self.diff_pmm = harmonic_mean_8_corners(
+            diffusion_pad[1:-1, :-2, :-2], diffusion_pad[1:-1, :-2, 1:-1],
+            diffusion_pad[1:-1, 1:-1, :-2], diffusion_pad[1:-1, 1:-1, 1:-1],
+            diffusion_pad[2:, :-2, :-2], diffusion_pad[2:, :-2, 1:-1],
+            diffusion_pad[2:, 1:-1, :-2], diffusion_pad[2:, 1:-1, 1:-1],
+        )
+        self.diff_mmm = harmonic_mean_8_corners(
+            diffusion_pad[:-2, :-2, :-2], diffusion_pad[:-2, :-2, 1:-1],
+            diffusion_pad[:-2, 1:-1, :-2], diffusion_pad[:-2, 1:-1, 1:-1],
+            diffusion_pad[1:-1, :-2, :-2], diffusion_pad[1:-1, :-2, 1:-1],
+            diffusion_pad[1:-1, 1:-1, :-2], diffusion_pad[1:-1, 1:-1, 1:-1],
+        )
+
+        print("DONE PRE-PROCESSING DIFFUSION MATRIX...")
+
+        max_diff = max(self.wm_ext + self.wm_axn, self.gm_ext + self.gm_axn)
+        self.dt = self.stability_factor / (
+            2.0
+            * max_diff
+            * (1.0 / self.dx**2 + 1.0 / self.dy**2 + 1.0 / self.dz**2)
+            + max(self.wm_alpha, self.gm_alpha)
+        )
+
+        print(f'\u0394t = {self.dt}')
         self.current_step = 0
 
     def explicit_ftcs(self):
         self.c = compute_explicit_ftcs_step(
-                                            self.c, self.valid_mask, self.fiber, self.wm_mask, self.gm_mask,
-                                            self.wm_ext, self.wm_axn, self.wm_alpha, self.gm_ext,
-                                            self.gm_axn, self.gm_alpha, self.dx, self.dy, self.dz,
-                                            self.dt
-                                        )
+                    self.c, self.valid_mask, self.wm_mask, self.gm_mask,
+                    self.wm_alpha, self.gm_alpha, self.diff_ppp, self.diff_mpp,
+                    self.diff_pmp, self.diff_ppm, self.diff_mmp, self.diff_mpm,
+                    self.diff_pmm, self.diff_mmm, self.dx, self.dy,
+                    self.dz, self.dt
+        )
 
     # TODO
     def runge_kutta():
@@ -102,9 +178,6 @@ class AmyloidSimulation:
             total_time += current_dt
 
             if step % output_freq == 0:
-                results.append(self.c.copy())
-                time_steps_list.append(total_time)
-
                 # compute maximum concentration
                 max_c = np.nanmax(self.c)
 
@@ -117,9 +190,8 @@ class AmyloidSimulation:
             if total_time >= self.target_time:
                 print(f" Simulation time reached target time {self.target_time} years. Stopping.")
                 # Ensure the very last state is saved if stopping due to time
-                if step % output_freq != 0:
-                    results.append(self.c.copy())
-                    time_steps_list.append(total_time + initial_sim_time_offset)
+                results.append(self.c.copy())
+                time_steps_list.append(total_time + initial_sim_time_offset)
                 break
 
             step += 1
