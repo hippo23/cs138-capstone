@@ -1,6 +1,7 @@
 import time
 import numpy as np
 
+
 try:
     import cupy as _cp
 except ImportError:
@@ -148,7 +149,7 @@ def compute_explicit_ftcs_step(
     t_step_start = time.perf_counter()
     t0 = t_step_start
 
-    alpha = np.zeros(c.shape, dtype=np.float64)
+    alpha = np.zeros(c.shape, dtype=np.float32)
     alpha[wm_mask] = wm_alpha
     alpha[gm_mask] = gm_alpha
     c_pad = np.pad(c, pad_width=1, mode="edge")
@@ -253,7 +254,7 @@ def compute_explicit_ftcs_step_gpu(
     diff_pmm_g = xp.asarray(diff_pmm)
     diff_mmm_g = xp.asarray(diff_mmm)
 
-    alpha = xp.zeros(c_g.shape, dtype=xp.float64)
+    alpha = xp.zeros(c_g.shape, dtype=xp.float32)
     alpha[wm_g] = wm_alpha
     alpha[gm_g] = gm_alpha
     c_pad = xp.pad(c_g, pad_width=1, mode="edge")
@@ -356,7 +357,7 @@ def compute_explicit_ftcs_step_gpu(
 
     growth = alpha * c_g * (1.0 - c_g)
     c_final = c_g + dt * (div_flux + growth)
-    c_final[~valid_g] = 0.0
+    c_final *= valid_g
     t0 = _checkpoint(verbose_midstep, f"{step_tag} 5/5 growth + update", t_step_start, t0)
 
     if check_stats:

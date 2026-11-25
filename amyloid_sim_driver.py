@@ -4,10 +4,11 @@ import sys
 import time
 import nibabel as nib
 import numpy as np
+import cupy as cp
 from typing import cast
 from amyloid_sim_class import AmyloidSimulation
 
-np.random.seed(24) 
+cp.random.seed(24)
 
 def amyloid_simulation_driver(args):
     """
@@ -75,16 +76,16 @@ def amyloid_simulation_driver(args):
 
     # using the probability files and the mask (which essentially mirrors the anatomy)
     # we decide what is the most probably tissue category at each "cell" in the brain
-    mask = mask_img.get_fdata() > 0
-    gm = gm_img.get_fdata()
-    wm = wm_img.get_fdata()
-    csf = csf_img.get_fdata()
-    fiber = fiber_img.get_fdata()
-    fiber_mask = np.linalg.norm(fiber, axis=-1) > 1e-6
-    seed = seed_img.get_fdata() > 0
+    mask = cp.asarray(mask_img.get_fdata() > 0)
+    gm = cp.asarray(gm_img.get_fdata())
+    wm = cp.asarray(wm_img.get_fdata())
+    csf = cp.asarray(csf_img.get_fdata())
+    fiber = cp.asarray(fiber_img.get_fdata())
+    fiber_mask = cp.linalg.norm(fiber, axis=-1) > 1e-6
+    seed = cp.asarray(seed_img.get_fdata() > 0)
 
-    tissue_probs = np.stack([wm, gm, csf], axis=-1)
-    tissue_max = np.argmax(tissue_probs, axis=-1) + 1
+    tissue_probs = cp.stack([wm, gm, csf], axis=-1)
+    tissue_max = cp.argmax(tissue_probs, axis=-1) + 1
 
     valid_mask = (tissue_max != 3) & mask & fiber_mask
     seed_mask = valid_mask & seed
@@ -109,9 +110,9 @@ def amyloid_simulation_driver(args):
         import traceback
         traceback.print_exc()
         sys.exit(1)
-        
 
-    # Run Simulation 
+
+    # Run Simulation
     print(f"\n--- Running Simulation for {args.target_time} years ---")
     start_time = time.time()
     try:
@@ -124,14 +125,14 @@ def amyloid_simulation_driver(args):
         import traceback
         traceback.print_exc()
         sys.exit(1) # Exit if simulation crashes
-        
+
     end_time = time.time()
     print(f"Simulation compute time: {end_time - start_time:.2f} seconds")
 
     # Visualize and Save Results
     if not results:
         print("Simulation finished, but no results were generated (possibly 0 steps or immediate instability).")
-        sys.exit(0) 
+        sys.exit(0)
 
     print("\n--- Visualizing and Saving Results ---")
     try:
@@ -176,7 +177,7 @@ if __name__ == "__main__":
     sim_run_group.add_argument("--min-seed-value", type=float, default=0.05, help="Maximum possible initial concentration of amyloid inside the seeding region.")
     sim_run_group.add_argument("--max-seed-value", type=float, default=0.001, help="Minimum possible initial concentration of amyloid inside seeding region.")
 
-    # Parse Arguments 
+    # Parse Arguments
     args = parser.parse_args()
 
     amyloid_simulation_driver(args)
