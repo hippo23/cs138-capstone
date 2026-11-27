@@ -22,10 +22,9 @@ class AmyloidSimulation:
         -----------
         valid_mask : numpy.ndarray : Mask indicating valid areas for simulation
         seed_mask : numpy.ndarray : Mask indicating seeding region.
+        fiber : numpy.ndarray : 3D array storing normalized direction of fibers for all matter in the brain.
         wm_mask : numpy.ndarray : Mask indicating all valid white matter.
         gm_mask : numpy.ndarray : Mask indicating all valid gray matter.
-        stability_factor : float : Factor to reduce timestep (0-1) for stability control
-        target_time : float : Target simulation time (seconds)
         min_seed_value : float : minimum initial concentration within seeding region
         max_seed_value : float : maximum initiial concentration within seeding region
         wm_ext : float : Extracellular diffusion for white matter
@@ -34,6 +33,9 @@ class AmyloidSimulation:
         gm_ext : float : Extracellular diffusion for gray matter
         gm_axn : float : Axonal transportation for gray matter
         gm_alpha : float : Growth rate for gray matter
+        stability_factor : float : Factor to reduce timestep (0-1) for stability control
+        target_time : float : Target simulation time (seconds)
+        gpu : bool : Whether to compute using GPU or CPU
         """
 
         if gpu:
