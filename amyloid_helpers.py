@@ -1,20 +1,28 @@
 import numpy as np
-import cupy as _cp
 import time
+
+xp = np
+try:
+    import cupy as _cp
+    _cp.random.seed(24)
+    xp = _cp
+except ImportError:
+    _cp = None
+    xp = np
 
 def harmonic_mean_8_corners(c000, c001, c010, c011, c100, c101, c110, c111):
     corners = (c000, c001, c010, c011, c100, c101, c110, c111)
-    out_shape = _cp.broadcast_shapes(*(_cp.shape(c) for c in corners))
-    has_zero = _cp.zeros(out_shape, dtype=bool)
-    recip_sum = _cp.zeros(out_shape, dtype=_cp.float32)
+    out_shape = xp.broadcast_shapes(*(xp.shape(c) for c in corners))
+    has_zero = xp.zeros(out_shape, dtype=bool)
+    recip_sum = xp.zeros(out_shape, dtype=xp.float32)
 
     for c in corners:
-        c_arr = _cp.asarray(c, dtype=_cp.float32)
+        c_arr = xp.asarray(c, dtype=xp.float32)
         zero_mask = c_arr <= 0.0
         has_zero |= zero_mask
-        recip_sum += _cp.where(zero_mask, 0.0, 1.0 / _cp.where(zero_mask, 1.0, c_arr))
+        recip_sum += xp.where(zero_mask, 0.0, 1.0 / xp.where(zero_mask, 1.0, c_arr))
 
-    return _cp.where(has_zero, 0.0, 8.0 / recip_sum)
+    return xp.where(has_zero, 0.0, 8.0 / recip_sum)
 
 
 def get_array_module(arr):

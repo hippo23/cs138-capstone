@@ -1,13 +1,17 @@
 import time
 import numpy as np
-import cupy as _cp
 import nibabel as nib
 from compute_explicit_spread_step import compute_explicit_ftcs_step
-from cupyx.scipy.ndimage import gaussian_filter
-from scipy.ndimage import np_gaussian_filter
+from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from amyloid_helpers import harmonic_mean_8_corners, get_array_module
 
-_cp.random.seed(24)
+try:
+    import cupy as _cp
+    from cupyx.scipy.ndimage import gaussian_filter
+    _cp.random.seed(24)
+except ImportError:
+    _cp = np
+
 np.random.seed(24)
 
 class AmyloidSimulation:

@@ -4,11 +4,15 @@ import sys
 import time
 import nibabel as nib
 import numpy as np
-import cupy as cp
 from typing import cast
 from amyloid_sim_class import AmyloidSimulation
 
-cp.random.seed(24)
+try:
+    import cupy as _cp
+    cp.random.seed(24)
+except ImportError:
+    _cp = np
+
 
 def amyloid_simulation_driver(args):
     """
@@ -74,18 +78,24 @@ def amyloid_simulation_driver(args):
         traceback.print_exc()
         sys.exit(1)
 
+    xp = None
+    if args.use_gpu:
+        xp = _cp
+    else:
+        xp = np
+
     # using the probability files and the mask (which essentially mirrors the anatomy)
     # we decide what is the most probably tissue category at each "cell" in the brain
-    mask = cp.asarray(mask_img.get_fdata() > 0)
-    gm = cp.asarray(gm_img.get_fdata())
-    wm = cp.asarray(wm_img.get_fdata())
-    csf = cp.asarray(csf_img.get_fdata())
-    fiber = cp.asarray(fiber_img.get_fdata())
-    fiber_mask = cp.linalg.norm(fiber, axis=-1) > 1e-6
-    seed = cp.asarray(seed_img.get_fdata() > 0)
+    mask = xp.asarray(mask_img.get_fdata() > 0)
+    gm = xp.asarray(gm_img.get_fdata())
+    wm = xp.asarray(wm_img.get_fdata())
+    csf = xp.asarray(csf_img.get_fdata())
+    fiber = xp.asarray(fiber_img.get_fdata())
+    fiber_mask = xp.linalg.norm(fiber, axis=-1) > 1e-6
+    seed = xp.asarray(seed_img.get_fdata() > 0)
 
-    tissue_probs = cp.stack([wm, gm, csf], axis=-1)
-    tissue_max = cp.argmax(tissue_probs, axis=-1) + 1
+    tissue_probs = xp.stack([wm, gm, csf], axis=-1)
+    tissue_max = xp.argmax(tissue_probs, axis=-1) + 1
 
     valid_mask = (tissue_max != 3) & mask & fiber_mask
     seed_mask = valid_mask & seed
