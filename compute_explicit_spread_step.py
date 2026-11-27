@@ -1,28 +1,12 @@
 import time
 import numpy as np
+from amyloid_helpers import get_array_module, checkpoint
 
 
 try:
     import cupy as _cp
 except ImportError:
     _cp = None
-
-
-def _get_array_module(arr):
-    if _cp is not None and isinstance(arr, _cp.ndarray):
-        return _cp
-    return np
-
-
-def _checkpoint(enabled, tag, t_step_start, t_stage_start):
-    if not enabled:
-        return time.perf_counter()
-    now = time.perf_counter()
-    print(
-        f"  [{tag}] +{now - t_stage_start:.3f}s (elapsed: {now - t_step_start:.3f}s)",
-        flush=True,
-    )
-    return time.perf_counter()
 
 
 def _tensor_vec_mul(diff_c, gx, gy, gz, xp):
@@ -55,7 +39,7 @@ def compute_explicit_ftcs_step_gpu(
     check_stats=False,
     step_idx=None,
 ):
-    xp = _get_array_module(c)
+    xp = get_array_module(c)
     step_tag = f"step {step_idx}" if step_idx is not None else "step"
     if verbose_midstep:
         print(f"--- {step_tag} started (shape={c.shape}, dtype={c.dtype}, backend={xp.__name__}) ---", flush=True)
@@ -81,7 +65,7 @@ def compute_explicit_ftcs_step_gpu(
     alpha[wm_g] = wm_alpha
     alpha[gm_g] = gm_alpha
     c_pad = xp.pad(c_g, pad_width=1, mode="edge")
-    t0 = _checkpoint(verbose_midstep, f"{step_tag} 1/5 setup+pad", t_step_start, t0)
+    t0 = checkpoint(verbose_midstep, f"{step_tag} 1/5 setup+pad", t_step_start, t0)
 
     inv_4dx = 0.25 / dx
     inv_4dy = 0.25 / dy
@@ -150,7 +134,7 @@ def compute_explicit_ftcs_step_gpu(
     dx_mmm = ((c_0mm - c_mmm) + (c_00m - c_m0m) + (c_0m0 - c_mm0) + (c_000 - c_m00)) * inv_4dx
     dy_mmm = ((c_m0m - c_mmm) + (c_00m - c_0mm) + (c_m00 - c_mm0) + (c_000 - c_0m0)) * inv_4dy
     dz_mmm = ((c_mm0 - c_mmm) + (c_0m0 - c_0mm) + (c_m00 - c_m0m) + (c_000 - c_00m)) * inv_4dz
-    t0 = _checkpoint(verbose_midstep, f"{step_tag} 2/5 8-octant gradients", t_step_start, t0)
+    t0 = checkpoint(verbose_midstep, f"{step_tag} 2/5 8-octant gradients", t_step_start, t0)
 
     # NOTE: This is where we combine the gradients with the diffusion matrix, referring to the numerator of
     # eq. (8) in the documentation.
@@ -162,7 +146,7 @@ def compute_explicit_ftcs_step_gpu(
     fx_mpm, fy_mpm, fz_mpm = _tensor_vec_mul(diff_mpm_g, dx_mpm, dy_mpm, dz_mpm, xp)
     fx_pmm, fy_pmm, fz_pmm = _tensor_vec_mul(diff_pmm_g, dx_pmm, dy_pmm, dz_pmm, xp)
     fx_mmm, fy_mmm, fz_mmm = _tensor_vec_mul(diff_mmm_g, dx_mmm, dy_mmm, dz_mmm, xp)
-    t0 = _checkpoint(verbose_midstep, f"{step_tag} 3/5 fluxes", t_step_start, t0)
+    t0 = checkpoint(verbose_midstep, f"{step_tag} 3/5 fluxes", t_step_start, t0)
 
     # NOTE: This is the full calculation of the divergence, referring to the full equation in eq. (8) of
     # the documentation.
@@ -182,12 +166,12 @@ def compute_explicit_ftcs_step_gpu(
     ) / (4.0 * dz)
 
     div_flux = div_x + div_y + div_z
-    t0 = _checkpoint(verbose_midstep, f"{step_tag} 4/5 divergence", t_step_start, t0)
+    t0 = checkpoint(verbose_midstep, f"{step_tag} 4/5 divergence", t_step_start, t0)
 
     growth = alpha * c_g * (1.0 - c_g)
     c_final = c_g + dt * (div_flux + growth)
     c_final *= valid_g
-    t0 = _checkpoint(verbose_midstep, f"{step_tag} 5/5 growth + update", t_step_start, t0)
+    t0 = checkpoint(verbose_midstep, f"{step_tag} 5/5 growth + update", t_step_start, t0)
 
     if check_stats:
         has_nan = bool(xp.isnan(c_final).any())

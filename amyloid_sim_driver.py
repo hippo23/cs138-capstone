@@ -103,7 +103,8 @@ def amyloid_simulation_driver(args):
             gm_mask=gm_mask,
             max_seed_value=args.max_seed_value,
             min_seed_value=args.min_seed_value,
-            target_time=args.target_time
+            target_time=args.target_time,
+            gpu=args.use_gpu
         )
     except Exception as e:
         print(f"ERROR: Failed to initialize AmyloidSimulation. {e}")
@@ -176,6 +177,12 @@ if __name__ == "__main__":
     sim_run_group.add_argument("--target-time", type=float, default=1, help="Target simulation time (years) for adaptive timestep stop.")
     sim_run_group.add_argument("--min-seed-value", type=float, default=0.05, help="Maximum possible initial concentration of amyloid inside the seeding region.")
     sim_run_group.add_argument("--max-seed-value", type=float, default=0.001, help="Minimum possible initial concentration of amyloid inside seeding region.")
+
+    # Simulation Dependency arguments
+    sim_dep_group = parser.add_argument_group('Simulation Dependencies')
+    sim_dep_group.add_argument("--use-gpu", action='store_true',
+                                help="Run simulation on either NumPy or CuPy.")
+
 
     # Parse Arguments
     args = parser.parse_args()

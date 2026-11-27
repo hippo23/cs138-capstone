@@ -1,15 +1,17 @@
 import time
 import numpy as np
-import cupy as cp
+import cupy as _cp
 import nibabel as nib
 from compute_explicit_spread_step import compute_explicit_ftcs_step_gpu
 from cupyx.scipy.ndimage import gaussian_filter
-from amyloid_helpers import harmonic_mean_8_corners
+from scipy.ndimage import np_gaussian_filter
+from amyloid_helpers import harmonic_mean_8_corners, get_array_module
 
-cp.random.seed(24)
+_cp.random.seed(24)
+np.random.seed(24)
 
 class AmyloidSimulation:
-    def __init__(self, valid_mask, fiber, seed_mask, wm_mask, gm_mask, max_seed_value=0.05, min_seed_value=0.001, wm_ext = 1.5, wm_axn = 24.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.6, target_time=1.0):
+    def __init__(self, valid_mask, fiber, seed_mask, wm_mask, gm_mask, max_seed_value=0.05, min_seed_value=0.001, wm_ext = 1.5, wm_axn = 24.0, wm_alpha = 0.6, gm_ext = 1.5, gm_axn = 0.0, gm_alpha = 0.3, stability_factor=0.6, target_time=1.0, gpu=False):
 
         """
         Parameters:
@@ -30,14 +32,24 @@ class AmyloidSimulation:
         gm_alpha : float : Growth rate for gray matter
         """
 
+        if gpu:
+            self.xp = _cp
+        else:
+            self.xp = np
+
         self.valid_mask = valid_mask.astype(bool)
         self.fiber = fiber
         self.wm_mask = wm_mask
         self.gm_mask = gm_mask
 
-        self.c = cp.zeros(self.valid_mask.shape, dtype=cp.float32)
-        noise = cp.random.uniform(min_seed_value, max_seed_value, size=self.valid_mask.shape)
-        noise = gaussian_filter(noise, sigma=2.0)
+        self.c = self.xp.zeros(self.valid_mask.shape, dtype=self.xp.float32)
+        noise = self.xp.random.uniform(min_seed_value, max_seed_value, size=self.valid_mask.shape)
+
+        if gpu:
+            noise = gaussian_filter(noise, sigma=2.0)
+        else:
+            noise = np_gaussian_filter(noise, sigma=2.0)
+
         self.c[seed_mask] = noise[seed_mask]
 
         self.wm_ext = float(wm_ext) # cm^2 / year
@@ -59,20 +71,20 @@ class AmyloidSimulation:
 
         # we pre-compute the diffusion matrix used in calculation, as this is a heavy computation step.
         print("PRE-PROCESSING DIFFUSION MATRIX...")
-        ext_diff = cp.zeros(self.c.shape, dtype=cp.float32)
+        ext_diff = self.xp.zeros(self.c.shape, dtype=self.xp.float32)
         ext_diff[self.wm_mask] = self.wm_ext
         ext_diff[self.gm_mask] = self.gm_ext
         ext_diff[~self.valid_mask] = 0.0
 
         dir_outer_prod = self.fiber[..., :, None] * self.fiber[..., None, :]
-        axonal_diff = cp.zeros(self.c.shape + (3, 3), dtype=cp.float32)
+        axonal_diff = self.xp.zeros(self.c.shape + (3, 3), dtype=self.xp.float32)
         axonal_diff[self.wm_mask] = self.wm_axn * dir_outer_prod[self.wm_mask]
         axonal_diff[self.gm_mask] = self.gm_axn * dir_outer_prod[self.gm_mask]
 
         # NOTE: (ANISOTROPIC) just the axonal diffusion.
         axonal_diff[~self.valid_mask] = 0.0
-        diffusion = ext_diff[..., None, None] * cp.eye(3) + axonal_diff
-        diffusion_pad = cp.pad(diffusion, pad_width=((1, 1), (1, 1), (1, 1), (0, 0), (0, 0)), mode="edge")
+        diffusion = ext_diff[..., None, None] * self.xp.eye(3) + axonal_diff
+        diffusion_pad = self.xp.pad(diffusion, pad_width=((1, 1), (1, 1), (1, 1), (0, 0), (0, 0)), mode="edge")
 
 
         # NOTE: (ANISOTROPIC) this is the calculation of the axonal diffusion matrix to avoid re-calculating every computation step.
@@ -218,7 +230,7 @@ class AmyloidSimulation:
 
             if step % output_freq == 0:
                 # compute maximum concentration
-                max_c = cp.nanmax(self.c)
+                max_c = self.xp.nanmax(self.c)
 
                 print(
                     f"Step {step} ",
@@ -241,7 +253,7 @@ class AmyloidSimulation:
         return results, time_steps_list
 
     def visualize_results(self, results, affine, save_final_frame=False, output_path=None):
-        final_frame = cp.asarray(results[-1], dtype=cp.float32)
+        final_frame = self.xp.asarray(results[-1], dtype=self.xp.float32)
 
         if save_final_frame and output_path:
             img = nib.Nifti1Image(final_frame, affine)
