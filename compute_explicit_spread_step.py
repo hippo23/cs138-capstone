@@ -16,7 +16,7 @@ def _tensor_vec_mul(diff_c, gx, gy, gz, xp):
     return fx, fy, fz
 
 
-def compute_explicit_ftcs_step_gpu(
+def compute_explicit_ftcs_step(
     c,
     valid_mask,
     wm_mask,

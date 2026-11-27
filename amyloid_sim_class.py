@@ -2,7 +2,7 @@ import time
 import numpy as np
 import cupy as _cp
 import nibabel as nib
-from compute_explicit_spread_step import compute_explicit_ftcs_step_gpu
+from compute_explicit_spread_step import compute_explicit_ftcs_step
 from cupyx.scipy.ndimage import gaussian_filter
 from scipy.ndimage import np_gaussian_filter
 from amyloid_helpers import harmonic_mean_8_corners, get_array_module
@@ -81,13 +81,13 @@ class AmyloidSimulation:
         axonal_diff[self.wm_mask] = self.wm_axn * dir_outer_prod[self.wm_mask]
         axonal_diff[self.gm_mask] = self.gm_axn * dir_outer_prod[self.gm_mask]
 
-        # NOTE: (ANISOTROPIC) just the axonal diffusion.
+        # NOTE: Just the axonal diffusion.
         axonal_diff[~self.valid_mask] = 0.0
         diffusion = ext_diff[..., None, None] * self.xp.eye(3) + axonal_diff
         diffusion_pad = self.xp.pad(diffusion, pad_width=((1, 1), (1, 1), (1, 1), (0, 0), (0, 0)), mode="edge")
 
 
-        # NOTE: (ANISOTROPIC) this is the calculation of the axonal diffusion matrix to avoid re-calculating every computation step.
+        # NOTE: This is the calculation of the axonal diffusion matrix for the 8 quadrants (refer to eq. (6) and (8) in the documentation).
         self.diff_ppp = harmonic_mean_8_corners(
             diffusion_pad[1:-1, 1:-1, 1:-1], diffusion_pad[1:-1, 1:-1, 2:],
             diffusion_pad[1:-1, 2:, 1:-1], diffusion_pad[1:-1, 2:, 2:],
@@ -151,7 +151,7 @@ class AmyloidSimulation:
         self.current_step = 0
 
     def explicit_ftcs(self):
-        self.c = compute_explicit_ftcs_step_gpu(
+        self.c = compute_explicit_ftcs_step(
                     self.c, self.valid_mask, self.wm_mask, self.gm_mask,
                     self.wm_alpha, self.gm_alpha, self.diff_ppp, self.diff_mpp,
                     self.diff_pmp, self.diff_ppm, self.diff_mmp, self.diff_mpm,
@@ -162,7 +162,7 @@ class AmyloidSimulation:
     def runge_kutta(self):
         # NOTE: I'm not sure if this is the correct way, but I'm pretty sure Runge-Kutta is just the
         # same step but weighed four times with slightly different c.
-        k1 = compute_explicit_ftcs_step_gpu(
+        k1 = compute_explicit_ftcs_step(
                     self.c, self.valid_mask, self.wm_mask, self.gm_mask,
                     self.wm_alpha, self.gm_alpha, self.diff_ppp, self.diff_mpp,
                     self.diff_pmp, self.diff_ppm, self.diff_mmp, self.diff_mpm,
@@ -172,7 +172,7 @@ class AmyloidSimulation:
 
         rk2_c = self.c + 0.5 * self.dt * k1
 
-        k2 = compute_explicit_ftcs_step_gpu(
+        k2 = compute_explicit_ftcs_step(
                     rk2_c, self.valid_mask, self.wm_mask, self.gm_mask,
                     self.wm_alpha, self.gm_alpha, self.diff_ppp, self.diff_mpp,
                     self.diff_pmp, self.diff_ppm, self.diff_mmp, self.diff_mpm,
@@ -182,7 +182,7 @@ class AmyloidSimulation:
 
         rk3_c = self.c + 0.5 * self.dt * k2
 
-        k3 = compute_explicit_ftcs_step_gpu(
+        k3 = compute_explicit_ftcs_step(
                     rk3_c, self.valid_mask, self.wm_mask, self.gm_mask,
                     self.wm_alpha, self.gm_alpha, self.diff_ppp, self.diff_mpp,
                     self.diff_pmp, self.diff_ppm, self.diff_mmp, self.diff_mpm,
@@ -192,7 +192,7 @@ class AmyloidSimulation:
 
         rk4_c = self.c + self.dt * k3
 
-        k4 = compute_explicit_ftcs_step_gpu(
+        k4 = compute_explicit_ftcs_step(
                     rk4_c, self.valid_mask, self.wm_mask, self.gm_mask,
                     self.wm_alpha, self.gm_alpha, self.diff_ppp, self.diff_mpp,
                     self.diff_pmp, self.diff_ppm, self.diff_mmp, self.diff_mpm,
