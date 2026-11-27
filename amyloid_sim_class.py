@@ -69,11 +69,13 @@ class AmyloidSimulation:
         axonal_diff[self.wm_mask] = self.wm_axn * dir_outer_prod[self.wm_mask]
         axonal_diff[self.gm_mask] = self.gm_axn * dir_outer_prod[self.gm_mask]
 
+        # NOTE: (ANISOTROPIC) just the axonal diffusion.
         axonal_diff[~self.valid_mask] = 0.0
         diffusion = ext_diff[..., None, None] * cp.eye(3) + axonal_diff
         diffusion_pad = cp.pad(diffusion, pad_width=((1, 1), (1, 1), (1, 1), (0, 0), (0, 0)), mode="edge")
 
 
+        # NOTE: (ANISOTROPIC) this is the calculation of the axonal diffusion matrix to avoid re-calculating every computation step.
         self.diff_ppp = harmonic_mean_8_corners(
             diffusion_pad[1:-1, 1:-1, 1:-1], diffusion_pad[1:-1, 1:-1, 2:],
             diffusion_pad[1:-1, 2:, 1:-1], diffusion_pad[1:-1, 2:, 2:],
@@ -145,8 +147,9 @@ class AmyloidSimulation:
                     self.dz, self.dt
         )
 
-    # TODO
     def runge_kutta(self):
+        # NOTE: I'm not sure if this is the correct way, but I'm pretty sure Runge-Kutta is just the
+        # same step but weighed four times with slightly different c.
         k1 = compute_explicit_ftcs_step_gpu(
                     self.c, self.valid_mask, self.wm_mask, self.gm_mask,
                     self.wm_alpha, self.gm_alpha, self.diff_ppp, self.diff_mpp,
